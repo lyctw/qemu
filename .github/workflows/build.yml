@@ -1,0 +1,58 @@
+name: Build QEMU RV64 binary
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2 * * *"
+
+jobs:
+  qemu-build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          path: build-dir
+
+      - name: Install Dependencies
+        run: |
+          sudo tee /etc/apt/sources.list > /dev/null << EOF
+          deb http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
+          deb http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
+          deb http://archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
+          deb http://archive.ubuntu.com/ubuntu jammy-backports main restricted universe multiverse
+          deb-src http://archive.ubuntu.com/ubuntu jammy main restricted universe multiverse
+          deb-src http://archive.ubuntu.com/ubuntu jammy-updates main restricted universe multiverse
+          deb-src http://archive.ubuntu.com/ubuntu jammy-security main restricted universe multiverse
+          deb-src http://archive.ubuntu.com/ubuntu jammy-backports main restricted universe multiverse
+          EOF
+          sudo apt update
+          sudo apt build-dep qemu -y
+          sudo apt install -y python3-dev python3-tomli
+
+      - name: Build and install QEMU
+        working-directory: build-dir
+        run: |
+          ./configure --target-list=riscv64-softmmu --enable-slirp --disable-debug-info
+          make -j
+          sudo make install
+          qemu-system-riscv64 --version
+          file build/qemu-system-riscv64
+
+      - name: Prepare Artifacts
+        run: |
+          mkdir -p artifact
+          cp -v build-dir/build/qemu-system-riscv64 artifact/
+
+      - name: Create Archive
+        run: |
+          tar -zcvf qemu-system-riscv64.tar.gz artifact
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-system-riscv64.tar.gz
+          path: qemu-system-riscv64.tar.gz
+          retention-days: 30
